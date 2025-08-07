@@ -5,14 +5,15 @@ exports.borrowBook = async (req, res) => {
   try {
     const { bookId } = req.body;
     const book = await Book.findById(bookId);
-    if (!book || book.copies < 1)
+    if (!book || book.copies < 1) {
       return res.status(400).json({ message: "Book not available" });
+    }
 
     book.copies -= 1;
     await book.save();
 
     const borrow = new Borrow({
-      user: req.user.id,
+      user: req.user._id,  // Use _id to match MongoDB default
       book: bookId,
       borrowDate: new Date(),
       isReturned: false
@@ -29,18 +30,21 @@ exports.returnBook = async (req, res) => {
   try {
     const { id } = req.params;
     const borrow = await Borrow.findById(id);
-    if (!borrow || borrow.isReturned)
+    if (!borrow || borrow.isReturned) {
       return res.status(400).json({ message: "Invalid borrow record" });
+    }
 
     borrow.isReturned = true;
     borrow.returnDate = new Date();
     await borrow.save();
 
     const book = await Book.findById(borrow.book);
-    book.copies += 1;
-    await book.save();
+    if (book) {
+      book.copies += 1;
+      await book.save();
+    }
 
-    res.json({ message: "Book returned" });
+    res.json({ message: "Book returned successfully" });
   } catch (err) {
     res.status(500).json({ message: "Return failed", error: err.message });
   }
@@ -48,12 +52,12 @@ exports.returnBook = async (req, res) => {
 
 exports.borrowHistory = async (req, res) => {
   try {
-    const history = await Borrow.find({ user: req.user.id })
+    const history = await Borrow.find({ user: req.user._id })
       .populate("book", "title author");
 
     res.json({ history });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch history", error: err.message });
+    res.status(500).json({ message: "History fetch failed", error: err.message });
   }
 };
 
@@ -63,7 +67,14 @@ exports.mostBorrowedBooks = async (req, res) => {
       { $group: { _id: "$book", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 },
-      { $lookup: { from: "books", localField: "_id", foreignField: "_id", as: "bookDetails" } },
+      {
+        $lookup: {
+          from: "books",
+          localField: "_id",
+          foreignField: "_id",
+          as: "bookDetails"
+        }
+      },
       { $unwind: "$bookDetails" }
     ]);
 
@@ -80,7 +91,14 @@ exports.activeMembers = async (req, res) => {
       { $group: { _id: "$user", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 },
-      { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "userDetails" } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "userDetails"
+        }
+      },
       { $unwind: "$userDetails" }
     ]);
 
@@ -93,15 +111,20 @@ exports.activeMembers = async (req, res) => {
 exports.bookAvailability = async (req, res) => {
   try {
     const books = await Book.find();
-    let total = 0, available = 0;
+    let total = 0;
+    let available = 0;
 
     books.forEach(book => {
-      total += book.copies;
-      available += book.copies;
+      total += book.totalCopies || 0;
+      available += book.copies || 0;
     });
 
     const borrowed = total - available;
-    res.json({ totalBooks: total, availableBooks: available, borrowedBooks: borrowed });
+    res.json({
+      totalBooks: total,
+      availableBooks: available,
+      borrowedBooks: borrowed
+    });
   } catch (err) {
     res.status(500).json({ message: "Report failed", error: err.message });
   }
