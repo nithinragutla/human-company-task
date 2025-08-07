@@ -7,31 +7,22 @@ const jwt = require("jsonwebtoken");
 
 dotenv.config();
 
-const authRoutes = require("../routes/auth.routes");
-const bookRoutes = require("../routes/book.routes");
-const borrowRoutes = require("../routes/borrow.routes");
+const authRoutes = require("../nalanda-library/routes/auth.routes");
+const bookRoutes = require("../nalanda-library/routes/book.routes");
+const borrowRoutes = require("../nalanda-library/routes/borrow.routes");
 
 const { ApolloServer } = require("apollo-server-express");
-const typeDefs = require("../graphql/schema");
-const resolvers = require("../graphql/resolvers");
-
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-}).then(() => console.log("MongoDB connected"))
-  .catch(err => console.error("MongoDB connection failed", err));
+const typeDefs = require("./graphql/schema");
+const resolvers = require("./graphql/resolvers");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// REST routes
 app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/borrow", borrowRoutes);
 
-// Apollo GraphQL setup
 const graphqlServer = new ApolloServer({
   typeDefs,
   resolvers,
@@ -50,12 +41,31 @@ const graphqlServer = new ApolloServer({
   }
 });
 
-async function startServer() {
-  await graphqlServer.start();
-  graphqlServer.applyMiddleware({ app, path: "/api/graphql" });
-}
-startServer();
+const startApp = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("MongoDB connected");
 
-// Export as Vercel function
+    await graphqlServer.start();
+    graphqlServer.applyMiddleware({ app, path: "/api/graphql" });
+
+    const PORT = process.env.PORT || 5000;
+
+    if (process.env.NODE_ENV !== "production") {
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+      });
+    }
+  } catch (err) {
+    console.error("Failed to connect MongoDB", err);
+  }
+};
+
+startApp();
+
+// For Vercel serverless
 module.exports = app;
 module.exports.handler = serverless(app);
