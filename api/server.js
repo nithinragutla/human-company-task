@@ -5,13 +5,13 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const serverless = require("serverless-http");
 
-const { ApolloServer } = require("apollo-server-express");
-
 dotenv.config();
 
 const authRoutes = require("../routes/auth.routes");
 const bookRoutes = require("../routes/book.routes");
 const borrowRoutes = require("../routes/borrow.routes");
+
+const { ApolloServer } = require("apollo-server-express");
 const typeDefs = require("../graphql/schema");
 const resolvers = require("../graphql/resolvers");
 
@@ -19,12 +19,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// REST routes
+// REST Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/borrow", borrowRoutes);
 
-// ApolloServer
+// GraphQL setup
 const graphqlServer = new ApolloServer({
   typeDefs,
   resolvers,
@@ -43,30 +43,24 @@ const graphqlServer = new ApolloServer({
   },
 });
 
-// We need to wait until MongoDB and Apollo are initialized before exporting
-let isInitialized = false;
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("MongoDB connected");
 
-const handler = async (req, res) => {
-  if (!isInitialized) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-      });
-      console.log("✅ MongoDB connected");
-
-      await graphqlServer.start();
-      graphqlServer.applyMiddleware({ app, path: "/api/graphql" });
-
-      isInitialized = true;
-    } catch (error) {
-      console.error("Startup Error:", error);
-      return res.status(500).json({ error: "Internal server error" });
-    }
+    // Start ApolloServer
+    await graphqlServer.start();
+    graphqlServer.applyMiddleware({ app, path: "/api/graphql" });
+  } catch (error) {
+    console.error("Startup error:", error);
   }
+}
 
-  const expressHandler = serverless(app);
-  return expressHandler(req, res);
-};
+startServer();
 
-module.exports = handler;
+// 🔥 Export the wrapped Express app for Vercel
+module.exports = serverless(app);
