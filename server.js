@@ -1,5 +1,4 @@
 const express = require("express");
-const serverless = require("serverless-http");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cors = require("cors");
@@ -7,9 +6,9 @@ const jwt = require("jsonwebtoken");
 
 dotenv.config();
 
-const authRoutes = require("../nalanda-library/routes/auth.routes");
-const bookRoutes = require("../nalanda-library/routes/book.routes");
-const borrowRoutes = require("../nalanda-library/routes/borrow.routes");
+const authRoutes = require("./routes/auth.routes");
+const bookRoutes = require("./routes/book.routes");
+const borrowRoutes = require("./routes/borrow.routes");
 
 const { ApolloServer } = require("apollo-server-express");
 const typeDefs = require("./graphql/schema");
@@ -19,10 +18,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// REST API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/borrow", borrowRoutes);
 
+// GraphQL
 const graphqlServer = new ApolloServer({
   typeDefs,
   resolvers,
@@ -66,6 +67,5 @@ const startApp = async () => {
 
 startApp();
 
-// For Vercel serverless
+// ✅ Only export app (not handler)
 module.exports = app;
-module.exports.handler = serverless(app);
